@@ -5,7 +5,7 @@ export default async function handler(req, res) {
   const { table } = req.query;
 
   if (!table) {
-    return res.status(400).json({ error: "Missing table name. Use ?table=users, products, etc." });
+    return res.status(400).json({ error: "Missing table name. Use ?table=TABLE_NAME" });
   }
 
   const tableEnvName = `AIRTABLE_TABLE_${table.toUpperCase()}`;
@@ -17,31 +17,25 @@ export default async function handler(req, res) {
 
   const airtableUrl = `https://api.airtable.com/v0/${baseId}/${tableId}`;
 
-  if (req.method === "GET") {
-    // 📥 GET: fetch records
-    try {
+  try {
+    if (req.method === "GET") {
+      // ✅ READ records
       const response = await fetch(airtableUrl, {
         headers: {
           Authorization: `Bearer ${token}`
         }
       });
-
       const data = await response.json();
-      res.status(200).json(data);
-    } catch (err) {
-      res.status(500).json({ error: "Error fetching data", details: err.message });
-    }
-  }
-
-  else if (req.method === "POST") {
-    // 📝 POST: add or update records
-    const { records } = req.body;
-
-    if (!records || !Array.isArray(records)) {
-      return res.status(400).json({ error: "Missing or invalid 'records' array in body." });
+      return res.status(200).json(data);
     }
 
-    try {
+    else if (req.method === "POST") {
+      // ✅ CREATE records
+      const { records } = req.body;
+      if (!records || !Array.isArray(records)) {
+        return res.status(400).json({ error: "Missing or invalid 'records' array in body." });
+      }
+
       const response = await fetch(airtableUrl, {
         method: "POST",
         headers: {
@@ -52,15 +46,56 @@ export default async function handler(req, res) {
       });
 
       const data = await response.json();
-      res.status(200).json(data);
-    } catch (err) {
-      res.status(500).json({ error: "Error posting data", details: err.message });
+      return res.status(200).json(data);
     }
-  }
 
-  else {
-    res.status(405).json({ error: "Method not allowed" });
+    else if (req.method === "PATCH") {
+      // 🔁 UPDATE records
+      const { records } = req.body;
+      if (!records || !Array.isArray(records)) {
+        return res.status(400).json({ error: "Missing or invalid 'records' array in body." });
+      }
+
+      const response = await fetch(airtableUrl, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ records })
+      });
+
+      const data = await response.json();
+      return res.status(200).json(data);
+    }
+
+    else if (req.method === "DELETE") {
+      // ❌ DELETE records
+      const { ids } = req.body;
+      if (!ids || !Array.isArray(ids)) {
+        return res.status(400).json({ error: "Missing or invalid 'ids' array in body." });
+      }
+
+      const query = ids.map(id => `records[]=${id}`).join("&");
+      const response = await fetch(`${airtableUrl}?${query}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      const data = await response.json();
+      return res.status(200).json(data);
+    }
+
+    else {
+      return res.status(405).json({ error: "Method not allowed." });
+    }
+
+  } catch (err) {
+    return res.status(500).json({
+      error: "Server error",
+      details: err.message
+    });
   }
 }
-
-
